@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notebook Data Management</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f8fafc;
+            color: #1e293b;
+            line-height: 1.6;
+        }
+        
+        .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
+        
+        .header { margin-bottom: 30px; }
+        .header h1 { font-size: 2.5rem; font-weight: bold; margin-bottom: 8px; }
+        .header p { color: #64748b; }
+        
+        .summary-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px; 
+            margin-bottom: 30px; 
+        }
+        
+        .summary-card { 
+            background: white;
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .summary-card h3 { font-size: 0.875rem; color: #64748b; margin-bottom: 4px; }
+        .summary-card .number { font-size: 2rem; font-weight: bold; }
+        .summary-card .icon { font-size: 2rem; }
+        
+        .controls { 
+            background: white;
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .search-container { position: relative; flex: 1; max-width: 400px; }
+        .search-input { 
+            width: 100%;
+            padding: 8px 12px 8px 36px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .search-icon { 
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #9ca3af;
+            pointer-events: none;
+        }
+        
+        .button { 
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+        
+        .button-primary { background: #3b82f6; color: white; }
+        .button-primary:hover { background: #2563eb; }
+        .button-secondary { background: white; border: 1px solid #d1d5db; color: #374151; }
+        .button-secondary:hover { background: #f9fafb; }
+        .button-danger { background: #ef4444; color: white; }
+        .button-danger:hover { background: #dc2626; }
+        
+        .table-container { 
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow: hidden;
+            margin-bottom: 30px;
+        }
+        
+        .table-wrapper { overflow-x: auto; }
+        
+        table { width: 100%; min-width: 1200px; border-collapse: collapse; }
+        
+        th { 
+            background: #dbeafe;
+            color: #1e40af;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        th:hover { background: #bfdbfe; }
+        th.remark-col { width: 300px; white-space: normal; }
+        
+        td { 
+            padding: 12px;
+            border-bottom: 1px solid #e5e7eb;
+            white-space: nowrap;
+            font-size: 14px;
+        }
+        
+        td.remark-cell { 
+            width: 300px;
+            white-space: normal;
+            word-wrap: break-word;
+            max-width: 50ch;
+        }
+        
+        .status-active { background-color: #f0fdf4; }
+        .status-active:hover { background-color: #dcfce7; }
+        .status-inactive { background-color: #fef2f2; }
+        .status-inactive:hover { background-color: #fee2e2; }
+        .status-damaged { background-color: #fffbeb; }
+        .status-damaged:hover { background-color: #fef3c7; }
+        
+        .status-badge { 
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .status-active .status-badge { background: #dcfce7; color: #166534; }
+        .status-inactive .status-badge { background: #fee2e2; color: #991b1b; }
+        .status-damaged .status-badge { background: #fef3c7; color: #92400e; }
+        
+        .actions { display: flex; gap: 8px; }
+        .icon-button { 
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+        .icon-button:hover { background-color: #f3f4f6; }
+        .icon-button.edit { color: #3b82f6; }
+        .icon-button.delete { color: #ef4444; }
+        
+        .modal { 
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+        
+        .modal-content { 
+            background: white;
+            border-radius: 8px;
+            max-width: 800px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header { 
+            padding: 24px 24px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .modal-body { padding: 0 24px 24px; }
+        
+        .form-grid { 
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .form-group { display: flex; flex-direction: column; }
+        .form-label { 
+            font-weight: 500;
+            margin-bottom: 4px;
+            font-size: 14px;
+        }
+        
+        .form-input, .form-select, .form-textarea { 
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        
+        .form-textarea { resize: vertical; min-height: 80px; }
+        
+        .form-actions { 
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 16px;
+        }
+        
+        .pagination { 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            margin-top: 20px;
+        }
+        
+        .pagination button { 
+            padding: 6px 12px;
+            border: 1px solid #d1d5db;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .pagination button:hover { background: #f9fafb; }
+        .pagination button.active { background: #3b82f6; color: white; border-color: #3b82f6; }
+        .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .hidden { display: none; }
+        
+        .info-section { 
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: #64748b;
+        }
+        
+        .status-summary { display: flex; gap: 20px; }
+        .status-item { display: flex; align-items: center; gap: 6px; }
+        
+        @media (max-width: 768px) {
+            .controls { flex-direction: column; align-items: stretch; }
+            .search-container { max-width: none; }
+            .summary-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>Notebook Data Management System</h1>
+            <p>Thai Solar Energy Public Company Limited</p>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="summary-grid">
+            <div class="summary-card">
+                <div>
+                    <h3>Total Devices</h3>
+                    <div class="number total-count">0</div>
+                </div>
+                <div class="icon">💻</div>
+            </div>
+            <div class="summary-card">
+                <div>
+                    <h3>Active</h3>
+                    <div class="number active-count" style="color: #059669;">0</div>
+                </div>
+                <div class="icon">🟢</div>
+            </div>
+            <div class="summary-card">
+                <div>
+                    <h3>Inactive</h3>
+                    <div class="number inactive-count" style="color: #dc2626;">0</div>
+                </div>
+                <div class="icon">🔴</div>
+            </div>
+            <div class="summary-card">
+                <div>
+                    <h3>Damaged</h3>
+                    <div class="number damaged-count" style="color: #d97706;">0</div>
+                </div>
+                <div class="icon">🟡</div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls">
+            <div class="search-container">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="searchInput" class="search-input" placeholder="Search notebooks...">
+            </div>
+            
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <label style="font-size: 14px;">Show:</label>
+                <select id="rowsPerPage" style="padding: 6px; border: 1px solid #d1d5db; border-radius: 4px;">
+                    <option value="10">10</option>
+                    <option value="20" selected>20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+                <span style="font-size: 14px;">entries</span>
+            </div>
+            
+            <div style="display: flex; gap: 12px;">
+                <button id="exportBtn" class="button button-secondary">
+                    📊 Export to Excel
+                </button>
+                <button id="addBtn" class="button button-primary">
+                    ➕ Add Data
+                </button>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="table-container">
+            <div class="table-wrapper">
+                <table id="notebookTable">
+                    <thead>
+                        <tr>
+                            <th onclick="sortTable('index')">No. ↕</th>
+                            <th onclick="sortTable('assetCode')">Asset Code ↕</th>
+                            <th onclick="sortTable('model')">Model ↕</th>
+                            <th onclick="sortTable('serialNumber')">Serial Number ↕</th>
+                            <th onclick="sortTable('location')">Location ↕</th>
+                            <th onclick="sortTable('userName')">User Name ↕</th>
+                            <th onclick="sortTable('department')">Department ↕</th>
+                            <th onclick="sortTable('status')">Status ↕</th>
+                            <th onclick="sortTable('deviceNumber')">Device Number ↕</th>
+                            <th onclick="sortTable('purchasedUnder')">Purchased Under ↕</th>
+                            <th onclick="sortTable('dueDate')">5-Year Due Date ↕</th>
+                            <th class="remark-col" onclick="sortTable('remark')">Remark ↕</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <!-- Data will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Info Section -->
+        <div class="info-section">
+            <div id="tableInfo">Showing 0 to 0 of 0 entries</div>
+            <div class="status-summary">
+                <div class="status-item">
+                    <span>🟢</span>
+                    <span>Active: <strong class="active-count">0</strong></span>
+                </div>
+                <div class="status-item">
+                    <span>🔴</span>
+                    <span>Inactive: <strong class="inactive-count">0</strong></span>
+                </div>
+                <div class="status-item">
+                    <span>🟡</span>
+                    <span>Damaged: <strong class="damaged-count">0</strong></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination" id="pagination">
+            <!-- Pagination buttons will be inserted here -->
+        </div>
+    </div>
+
+    <!-- Form Modal -->
+    <div id="formModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Add New Notebook</h2>
+                <button onclick="closeModal()" style="background: none; border: none; font-size: 24px; cursor: pointer;">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="notebookForm">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label">Asset Code *</label>
+                            <input type="text" name="assetCode" class="form-input" placeholder="e.g., NB-2024-001" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Model *</label>
+                            <input type="text" name="model" class="form-input" placeholder="e.g., Dell Latitude 5520" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Serial Number *</label>
+                            <input type="text" name="serialNumber" class="form-input" placeholder="e.g., DL5520240101" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Location *</label>
+                            <input type="text" name="location" class="form-input" placeholder="e.g., IT Department - Floor 3" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">User Name</label>
+                            <input type="text" name="userName" class="form-input" placeholder="e.g., John Smith">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Department *</label>
+                            <input type="text" name="department" class="form-input" placeholder="e.g., Information Technology" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Status *</label>
+                            <select name="status" class="form-select" required>
+                                <option value="">Select Status</option>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                                <option value="damaged">Damaged</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Device Number</label>
+                            <input type="text" name="deviceNumber" class="form-input" placeholder="e.g., DEV-001">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Purchased Under</label>
+                            <input type="text" name="purchasedUnder" class="form-input" placeholder="e.g., IT Budget 2024">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">5-Year Due Date</label>
+                            <input type="date" name="dueDate" class="form-input">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Remark</label>
+                        <textarea name="remark" class="form-textarea" placeholder="Additional notes or comments about this device..."></textarea>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" onclick="closeModal()" class="button button-secondary">Cancel</button>
+                        <button type="submit" class="button button-primary">Save Notebook</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteModal" class="modal hidden">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2>Confirm Deletion</h2>
+                <button onclick="closeDeleteModal()" style="background: none; border: none; font-size: 24px; cursor: pointer;">×</button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 16px;">Are you sure you want to delete this notebook entry? This action cannot be undone.</p>
+                <div id="deleteInfo" style="background: #f9fafb; padding: 12px; border-radius: 6px; margin-bottom: 24px;"></div>
+                <div class="form-actions">
+                    <button onclick="closeDeleteModal()" class="button button-secondary">Cancel</button>
+                    <button onclick="confirmDelete()" class="button button-danger">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data storage
+        let notebooks = JSON.parse(localStorage.getItem('notebooks') || '[]');
+        let currentPage = 1;
+        let rowsPerPage = 20;
+        let sortColumn = '';
+        let sortDirection = 'asc';
+        let searchQuery = '';
+        let editingId = null;
+        let deletingId = null;
+
+        // Initialize app
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSampleData();
+            renderTable();
+            updateSummary();
+            
+            // Event listeners
+            document.getElementById('searchInput').addEventListener('input', function(e) {
+                searchQuery = e.target.value.toLowerCase();
+                currentPage = 1;
+                renderTable();
+            });
+            
+            document.getElementById('rowsPerPage').addEventListener('change', function(e) {
+                rowsPerPage = parseInt(e.target.value);
+                currentPage = 1;
+                renderTable();
+            });
+            
+            document.getElementById('addBtn').addEventListener('click', function() {
+                openModal();
+            });
+            
+            document.getElementById('exportBtn').addEventListener('click', function() {
+                exportToExcel();
+            });
+            
+            document.getElementById('notebookForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                saveNotebook();
+            });
+        });
+
+        function loadSampleData() {
+            if (notebooks.length === 0) {
+                notebooks = [
+                    {
+                        id: 1,
+                        assetCode: "00OE6200872",
+                        model: "ThinkPad T14 Gen 3",
+                        serialNumber: "PC2F1234",
+                        location: "IT Department - Floor 3",
+                        userName: "John Smith",
+                        department: "Information Technology",
+                        status: "active",
+                        deviceNumber: "DEV-001",
+                        purchasedUnder: "IT Budget 2024",
+                        dueDate: "2029-01-15",
+                        remark: "Primary development laptop with Windows 11 Pro and development tools installed"
+                    },
+                    {
+                        id: 2,
+                        assetCode: "00OE6200873",
+                        model: "Dell Latitude 5520",
+                        serialNumber: "DL5520001",
+                        location: "HR Department - Floor 2",
+                        userName: "Jane Doe",
+                        department: "Human Resources",
+                        status: "active",
+                        deviceNumber: "DEV-002",
+                        purchasedUnder: "HR Budget 2024",
+                        dueDate: "2029-02-20",
+                        remark: "Standard office laptop for HR administrative tasks"
+                    },
+                    {
+                        id: 3,
+                        assetCode: "00OE6200874",
+                        model: "MacBook Pro 14",
+                        serialNumber: "MBA14001",
+                        location: "Design Department - Floor 4",
+                        userName: "",
+                        department: "Design Team",
+                        status: "inactive",
+                        deviceNumber: "DEV-003",
+                        purchasedUnder: "Design Budget 2023",
+                        dueDate: "2028-12-10",
+                        remark: "High-performance laptop for graphic design work, currently being serviced"
+                    }
+                ];
+                saveToStorage();
+            }
+        }
+
+        function saveToStorage() {
+            localStorage.setItem('notebooks', JSON.stringify(notebooks));
+        }
+
+        function getFilteredData() {
+            let filtered = notebooks;
+            
+            if (searchQuery) {
+                filtered = notebooks.filter(notebook => 
+                    Object.values(notebook).some(value => 
+                        value && value.toString().toLowerCase().includes(searchQuery)
+                    )
+                );
+            }
+            
+            if (sortColumn) {
+                filtered.sort((a, b) => {
+                    const aValue = a[sortColumn] || '';
+                    const bValue = b[sortColumn] || '';
+                    
+                    if (sortDirection === 'asc') {
+                        return aValue.toString().localeCompare(bValue.toString());
+                    } else {
+                        return bValue.toString().localeCompare(aValue.toString());
+                    }
+                });
+            }
+            
+            return filtered;
+        }
+
+        function renderTable() {
+            const filtered = getFilteredData();
+            const totalPages = Math.ceil(filtered.length / rowsPerPage);
+            const startIndex = (currentPage - 1) * rowsPerPage;
+            const endIndex = Math.min(startIndex + rowsPerPage, filtered.length);
+            const pageData = filtered.slice(startIndex, endIndex);
+            
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            
+            pageData.forEach((notebook, index) => {
+                const row = document.createElement('tr');
+                row.className = `status-${notebook.status}`;
+                
+                row.innerHTML = `
+                    <td>${startIndex + index + 1}</td>
+                    <td>${notebook.assetCode}</td>
+                    <td>${notebook.model}</td>
+                    <td>${notebook.serialNumber}</td>
+                    <td>${notebook.location}</td>
+                    <td>${notebook.userName || '-'}</td>
+                    <td>${notebook.department}</td>
+                    <td><span class="status-badge">${getStatusIcon(notebook.status)} ${notebook.status.charAt(0).toUpperCase() + notebook.status.slice(1)}</span></td>
+                    <td>${notebook.deviceNumber || '-'}</td>
+                    <td>${notebook.purchasedUnder || '-'}</td>
+                    <td>${notebook.dueDate || '-'}</td>
+                    <td class="remark-cell">${notebook.remark || '-'}</td>
+                    <td class="actions">
+                        <button class="icon-button edit" onclick="editNotebook(${notebook.id})" title="Edit">✏️</button>
+                        <button class="icon-button delete" onclick="deleteNotebook(${notebook.id})" title="Delete">🗑️</button>
+                    </td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+            
+            // Update info
+            document.getElementById('tableInfo').textContent = 
+                `Showing ${startIndex + 1} to ${endIndex} of ${filtered.length} entries`;
+            
+            // Update pagination
+            renderPagination(totalPages);
+        }
+
+        function getStatusIcon(status) {
+            switch (status) {
+                case 'active': return '🟢';
+                case 'inactive': return '🔴';
+                case 'damaged': return '🟡';
+                default: return '⚪';
+            }
+        }
+
+        function renderPagination(totalPages) {
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+            
+            if (totalPages <= 1) return;
+            
+            // Previous button
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '← Previous';
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    renderTable();
+                }
+            };
+            pagination.appendChild(prevBtn);
+            
+            // Page numbers
+            for (let i = 1; i <= Math.min(5, totalPages); i++) {
+                const pageBtn = document.createElement('button');
+                pageBtn.textContent = i;
+                pageBtn.className = i === currentPage ? 'active' : '';
+                pageBtn.onclick = () => {
+                    currentPage = i;
+                    renderTable();
+                };
+                pagination.appendChild(pageBtn);
+            }
+            
+            if (totalPages > 5) {
+                const ellipsis = document.createElement('span');
+                ellipsis.textContent = '...';
+                ellipsis.style.padding = '6px 12px';
+                pagination.appendChild(ellipsis);
+                
+                const lastBtn = document.createElement('button');
+                lastBtn.textContent = totalPages;
+                lastBtn.onclick = () => {
+                    currentPage = totalPages;
+                    renderTable();
+                };
+                pagination.appendChild(lastBtn);
+            }
+            
+            // Next button
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Next →';
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => {
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    renderTable();
+                }
+            };
+            pagination.appendChild(nextBtn);
+        }
+
+        function updateSummary() {
+            const total = notebooks.length;
+            const active = notebooks.filter(n => n.status === 'active').length;
+            const inactive = notebooks.filter(n => n.status === 'inactive').length;
+            const damaged = notebooks.filter(n => n.status === 'damaged').length;
+            
+            document.querySelector('.total-count').textContent = total;
+            document.querySelectorAll('.active-count').forEach(el => el.textContent = active);
+            document.querySelectorAll('.inactive-count').forEach(el => el.textContent = inactive);
+            document.querySelectorAll('.damaged-count').forEach(el => el.textContent = damaged);
+        }
+
+        function sortTable(column) {
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'asc';
+            }
+            renderTable();
+        }
+
+        function openModal(notebook = null) {
+            editingId = notebook ? notebook.id : null;
+            document.getElementById('modalTitle').textContent = notebook ? 'Edit Notebook' : 'Add New Notebook';
+            
+            const form = document.getElementById('notebookForm');
+            form.reset();
+            
+            if (notebook) {
+                Object.keys(notebook).forEach(key => {
+                    const input = form.querySelector(`[name="${key}"]`);
+                    if (input) {
+                        input.value = notebook[key] || '';
+                    }
+                });
+            }
+            
+            document.getElementById('formModal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('formModal').classList.add('hidden');
+            editingId = null;
+        }
+
+        function saveNotebook() {
+            const form = document.getElementById('notebookForm');
+            const formData = new FormData(form);
+            const notebook = {};
+            
+            for (let [key, value] of formData.entries()) {
+                notebook[key] = value;
+            }
+            
+            if (editingId) {
+                // Update existing
+                const index = notebooks.findIndex(n => n.id === editingId);
+                if (index !== -1) {
+                    notebooks[index] = { ...notebooks[index], ...notebook };
+                }
+            } else {
+                // Add new
+                notebook.id = Date.now();
+                notebooks.push(notebook);
+            }
+            
+            saveToStorage();
+            renderTable();
+            updateSummary();
+            closeModal();
+        }
+
+        function editNotebook(id) {
+            const notebook = notebooks.find(n => n.id === id);
+            if (notebook) {
+                openModal(notebook);
+            }
+        }
+
+        function deleteNotebook(id) {
+            const notebook = notebooks.find(n => n.id === id);
+            if (notebook) {
+                deletingId = id;
+                document.getElementById('deleteInfo').innerHTML = 
+                    `<strong>${notebook.assetCode}</strong><br><small>${notebook.model}</small>`;
+                document.getElementById('deleteModal').classList.remove('hidden');
+            }
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').classList.add('hidden');
+            deletingId = null;
+        }
+
+        function confirmDelete() {
+            if (deletingId) {
+                notebooks = notebooks.filter(n => n.id !== deletingId);
+                saveToStorage();
+                renderTable();
+                updateSummary();
+                closeDeleteModal();
+            }
+        }
+
+        function exportToExcel() {
+            // Simple CSV export since we can't use external libraries
+            const headers = [
+                'No.', 'Asset Code', 'Model', 'Serial Number', 'Location', 
+                'User Name', 'Department', 'Status', 'Device Number', 
+                'Purchased Under', '5-Year Due Date', 'Remark'
+            ];
+            
+            let csv = headers.join(',') + '\n';
+            
+            notebooks.forEach((notebook, index) => {
+                const row = [
+                    index + 1,
+                    notebook.assetCode || '',
+                    notebook.model || '',
+                    notebook.serialNumber || '',
+                    notebook.location || '',
+                    notebook.userName || '',
+                    notebook.department || '',
+                    notebook.status || '',
+                    notebook.deviceNumber || '',
+                    notebook.purchasedUnder || '',
+                    notebook.dueDate || '',
+                    notebook.remark || ''
+                ].map(field => `"${field.toString().replace(/"/g, '""')}"`);
+                
+                csv += row.join(',') + '\n';
+            });
+            
+            // Download CSV file
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'notebook-inventory.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
