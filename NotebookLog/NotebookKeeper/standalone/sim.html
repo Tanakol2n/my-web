@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notebook Data Management System</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <script crossorigin src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        .status-active { background-color: rgb(240 253 244); }
+        .status-active:hover { background-color: rgb(220 252 231); }
+        .status-inactive { background-color: rgb(254 242 242); }
+        .status-inactive:hover { background-color: rgb(254 226 226); }
+        .status-damaged { background-color: rgb(255 251 235); }
+        .status-damaged:hover { background-color: rgb(254 240 138); }
+        
+        .table-container { max-width: 1600px; margin: 0 auto; }
+        .remark-cell { max-width: 50ch; word-wrap: break-word; white-space: normal; }
+        
+        /* Custom scrollbar */
+        .overflow-x-auto::-webkit-scrollbar { height: 8px; }
+        .overflow-x-auto::-webkit-scrollbar-track { background: #f1f5f9; }
+        .overflow-x-auto::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+        .overflow-x-auto::-webkit-scrollbar-thumb:hover { background: #64748b; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        const { useState, useMemo, useEffect } = React;
+        const { Search, FileSpreadsheet, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Laptop, X, AlertTriangle } = lucide;
+
+        // Mock data storage
+        class NotebookStorage {
+            constructor() {
+                this.notebooks = JSON.parse(localStorage.getItem('notebooks') || '[]');
+                this.idCounter = parseInt(localStorage.getItem('idCounter') || '1');
+            }
+
+            save() {
+                localStorage.setItem('notebooks', JSON.stringify(this.notebooks));
+                localStorage.setItem('idCounter', this.idCounter.toString());
+            }
+
+            getAllNotebooks() {
+                return this.notebooks;
+            }
+
+            createNotebook(notebook) {
+                const newNotebook = {
+                    ...notebook,
+                    id: this.idCounter++
+                };
+                this.notebooks.push(newNotebook);
+                this.save();
+                return newNotebook;
+            }
+
+            updateNotebook(id, updates) {
+                const index = this.notebooks.findIndex(n => n.id === id);
+                if (index !== -1) {
+                    this.notebooks[index] = { ...this.notebooks[index], ...updates };
+                    this.save();
+                    return this.notebooks[index];
+                }
+                return null;
+            }
+
+            deleteNotebook(id) {
+                const index = this.notebooks.findIndex(n => n.id === id);
+                if (index !== -1) {
+                    this.notebooks.splice(index, 1);
+                    this.save();
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        const storage = new NotebookStorage();
+
+        // Export to Excel function
+        function exportToExcel(notebooks, filename) {
+            const exportData = notebooks.map((notebook, index) => ({
+                "No.": index + 1,
+                "Asset Code": notebook.assetCode,
+                "Model": notebook.model,
+                "Serial Number": notebook.serialNumber,
+                "Location": notebook.location,
+                "User Name": notebook.userName || "",
+                "Department": notebook.department,
+                "Status": notebook.status,
+                "Device Number": notebook.deviceNumber || "",
+                "Purchased Under": notebook.purchasedUnder || "",
+                "5-Year Due Date": notebook.dueDate || "",
+                "Remark": notebook.remark || "",
+            }));
+
+            const workbook = XLSX.utils.book_new();
+            const worksheet = XLSX.utils.json_to_sheet(exportData);
+            
+            const columnWidths = [
+                { wch: 5 }, { wch: 15 }, { wch: 20 }, { wch: 18 }, { wch: 25 },
+                { wch: 15 }, { wch: 20 }, { wch: 10 }, { wch: 15 }, { wch: 18 },
+                { wch: 15 }, { wch: 40 }
+            ];
+            worksheet["!cols"] = columnWidths;
+
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Notebook Inventory");
+            XLSX.writeFile(workbook, filename);
+        }
+
+        // Form Component
+        function NotebookForm({ isOpen, onClose, notebook, onSave }) {
+            const [formData, setFormData] = useState({
+                assetCode: '',
+                model: '',
+                serialNumber: '',
+                location: '',
+                userName: '',
+                department: '',
+                status: '',
+                deviceNumber: '',
+                purchasedUnder: '',
+                dueDate: '',
+                remark: ''
+            });
+
+            useEffect(() => {
+                if (notebook) {
+                    setFormData(notebook);
+                } else {
+                    setFormData({
+                        assetCode: '',
+                        model: '',
+                        serialNumber: '',
+                        location: '',
+                        userName: '',
+                        department: '',
+                        status: '',
+                        deviceNumber: '',
+                        purchasedUnder: '',
+                        dueDate: '',
+                        remark: ''
+                    });
+                }
+            }, [notebook]);
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (!formData.assetCode || !formData.model || !formData.serialNumber || !formData.location || !formData.department || !formData.status) {
+                    alert('Please fill in all required fields');
+                    return;
+                }
+                onSave(formData);
+            };
+
+            if (!isOpen) return null;
+
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="p-6 border-b border-gray-200">
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-xl font-semibold">{notebook ? 'Edit Notebook' : 'Add New Notebook'}</h2>
+                                <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+                                    <X size={24} />
+                                </button>
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleSubmit} className="p-6">
+                            <div className="grid md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Asset Code *</label>
+                                    <input
+                                        type="text"
+                                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                                        placeholder="e.g., NB-2024-001"
+                                        value={formData.assetCode}
+                                        onChange={(e) => setFormData({...formData, assetCode: e.target.value})}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Model *</label>
+                                    <input
+                                        type="text"
+                                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                                        placeholder="e.g., Dell Latitude 5520"
+                                        value={formData.model}
+                                        onChange={(e) => setFormData({...formData, model: e.target.value})}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Serial Number *</label>
+                                    <input
+                                        type="text"
+                                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                                        placeholder="e.g., DL5520240101"
+                                        value={formData.serialNumber}
+                                        onChange={(e) => setFormData({...formData, serialNumber: e.target.value})}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Location *</label>
+                                    <input
+                                        type="text"
+                                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                                        placeholder="e.g., IT Department - Floor 3"
+                                        value={formData.location}
+                                        onChange={(e) => setFormData({...formData, location: e.target.value})}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">User Name</label>
+                                    <input
+                                        type="text"
+                                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                                        placeholder="e.g., John Smith"
+                                        value={formData.userName}
+                                        onChange={(e) => setFormData({...formData, userName: e.target.value})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Department *</label>
+                                    <input
+                                        type="text"
+                                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                                        placeholder="e.g., Information Technology"
+                                        value={formData.department}
+                                        onChange={(e) => setFormData({...formData, department: e.target.value})}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Status *</label>
+                                    <select
+                                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                                        value={formData.status}
+                                        onChange={(e) => setFormData({...formData, status: e.target.value})}
+                                        required
+                                    >
+                                        <option value="">Select Status</option>
+                                        <option value="active">Active</option>
+                                        <option value="inactive">Inactive</option>
+                                        <option value="damaged">Damaged</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Device Number</label>
+                                    <input
+                                        type="text"
+                                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                                        placeholder="e.g., DEV-001"
+                                        value={formData.deviceNumber}
+                                        onChange={(e) => setFormData({...formData, deviceNumber: e.target.value})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Purchased Under</label>
+                                    <input
+                                        type="text"
+                                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                                        placeholder="e.g., IT Budget 2024"
+                                        value={formData.purchasedUnder}
+                                        onChange={(e) => setFormData({...formData, purchasedUnder: e.target.value})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">5-Year Due Date</label>
+                                    <input
+                                        type="date"
+                                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                                        value={formData.dueDate}
+                                        onChange={(e) => setFormData({...formData, dueDate: e.target.value})}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="mt-6">
+                                <label className="block text-sm font-medium mb-2">Remark</label>
+                                <textarea
+                                    className="w-full border border-gray-300 rounded-md px-3 py-2"
+                                    rows="3"
+                                    placeholder="Additional notes or comments about this device..."
+                                    value={formData.remark}
+                                    onChange={(e) => setFormData({...formData, remark: e.target.value})}
+                                />
+                            </div>
+
+                            <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200 mt-6">
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                                >
+                                    {notebook ? 'Update Notebook' : 'Save Notebook'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        }
+
+        // Delete Confirmation Component
+        function DeleteConfirmation({ isOpen, notebook, onConfirm, onCancel }) {
+            if (!isOpen || !notebook) return null;
+
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg max-w-md w-full">
+                        <div className="p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+                                    <AlertTriangle className="h-6 w-6 text-red-600" />
+                                </div>
+                                <h3 className="text-lg font-semibold">Confirm Deletion</h3>
+                            </div>
+                            
+                            <p className="text-gray-600 mb-4">
+                                Are you sure you want to delete this notebook entry? This action cannot be undone.
+                            </p>
+                            
+                            <div className="p-3 bg-gray-50 rounded-md mb-6">
+                                <p className="font-medium">{notebook.assetCode}</p>
+                                <p className="text-sm text-gray-600">{notebook.model}</p>
+                            </div>
+
+                            <div className="flex justify-end space-x-3">
+                                <button
+                                    onClick={onCancel}
+                                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={onConfirm}
+                                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Main App Component
+        function App() {
+            const [notebooks, setNotebooks] = useState([]);
+            const [searchQuery, setSearchQuery] = useState('');
+            const [currentPage, setCurrentPage] = useState(1);
+            const [rowsPerPage, setRowsPerPage] = useState(20);
+            const [sortColumn, setSortColumn] = useState('');
+            const [sortDirection, setSortDirection] = useState('asc');
+            const [isFormOpen, setIsFormOpen] = useState(false);
+            const [editingNotebook, setEditingNotebook] = useState(null);
+            const [deletingNotebook, setDeletingNotebook] = useState(null);
+
+            useEffect(() => {
+                setNotebooks(storage.getAllNotebooks());
+            }, []);
+
+            const filteredAndSortedNotebooks = useMemo(() => {
+                let filtered = notebooks;
+
+                if (searchQuery) {
+                    const query = searchQuery.toLowerCase();
+                    filtered = notebooks.filter(notebook => 
+                        Object.values(notebook).some(value => 
+                            value?.toString().toLowerCase().includes(query)
+                        )
+                    );
+                }
+
+                if (sortColumn) {
+                    filtered = [...filtered].sort((a, b) => {
+                        const aValue = a[sortColumn]?.toString() || '';
+                        const bValue = b[sortColumn]?.toString() || '';
+                        
+                        if (sortDirection === 'asc') {
+                            return aValue.localeCompare(bValue);
+                        } else {
+                            return bValue.localeCompare(aValue);
+                        }
+                    });
+                }
+
+                return filtered;
+            }, [notebooks, searchQuery, sortColumn, sortDirection]);
+
+            const totalPages = Math.ceil(filteredAndSortedNotebooks.length / rowsPerPage);
+            const paginatedNotebooks = filteredAndSortedNotebooks.slice(
+                (currentPage - 1) * rowsPerPage,
+                currentPage * rowsPerPage
+            );
+
+            const summary = useMemo(() => {
+                const total = notebooks.length;
+                const active = notebooks.filter(n => n.status === 'active').length;
+                const inactive = notebooks.filter(n => n.status === 'inactive').length;
+                const damaged = notebooks.filter(n => n.status === 'damaged').length;
+                return { total, active, inactive, damaged };
+            }, [notebooks]);
+
+            const handleSort = (column) => {
+                if (sortColumn === column) {
+                    setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                } else {
+                    setSortColumn(column);
+                    setSortDirection('asc');
+                }
+            };
+
+            const getStatusBadge = (status) => {
+                switch (status) {
+                    case 'active':
+                        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">🟢 Active</span>;
+                    case 'inactive':
+                        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">🔴 Inactive</span>;
+                    case 'damaged':
+                        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">🟡 Damaged</span>;
+                    default:
+                        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{status}</span>;
+                }
+            };
+
+            const getRowClassName = (status) => {
+                switch (status) {
+                    case 'active': return 'status-active';
+                    case 'inactive': return 'status-inactive';
+                    case 'damaged': return 'status-damaged';
+                    default: return 'hover:bg-gray-50';
+                }
+            };
+
+            const handleSave = (formData) => {
+                if (editingNotebook) {
+                    storage.updateNotebook(editingNotebook.id, formData);
+                } else {
+                    storage.createNotebook(formData);
+                }
+                setNotebooks(storage.getAllNotebooks());
+                setIsFormOpen(false);
+                setEditingNotebook(null);
+            };
+
+            const handleDelete = () => {
+                if (deletingNotebook) {
+                    storage.deleteNotebook(deletingNotebook.id);
+                    setNotebooks(storage.getAllNotebooks());
+                    setDeletingNotebook(null);
+                }
+            };
+
+            const handleExport = () => {
+                exportToExcel(notebooks, 'notebook-inventory.xlsx');
+            };
+
+            return (
+                <div className="table-container p-6 bg-gray-50 min-h-screen">
+                    {/* Header */}
+                    <div className="mb-8">
+                        <h1 className="text-3xl font-bold text-gray-900 mb-2">Notebook Data Management System</h1>
+                        <p className="text-gray-600">Manage and track your notebook inventory with comprehensive status monitoring</p>
+                    </div>
+
+                    {/* Top Summary */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                        <div className="bg-white rounded-lg shadow p-6">
+                            <div className="flex items-center">
+                                <div className="flex-1">
+                                    <p className="text-sm font-medium text-gray-600">Total Devices</p>
+                                    <p className="text-3xl font-bold text-gray-900">{summary.total}</p>
+                                </div>
+                                <Laptop className="h-8 w-8 text-blue-500" />
+                            </div>
+                        </div>
+                        <div className="bg-white rounded-lg shadow p-6">
+                            <div className="flex items-center">
+                                <div className="flex-1">
+                                    <p className="text-sm font-medium text-gray-600">Active</p>
+                                    <p className="text-3xl font-bold text-green-600">{summary.active}</p>
+                                </div>
+                                <div className="text-green-500 text-3xl">🟢</div>
+                            </div>
+                        </div>
+                        <div className="bg-white rounded-lg shadow p-6">
+                            <div className="flex items-center">
+                                <div className="flex-1">
+                                    <p className="text-sm font-medium text-gray-600">Inactive/Returned</p>
+                                    <p className="text-3xl font-bold text-red-600">{summary.inactive}</p>
+                                </div>
+                                <div className="text-red-500 text-3xl">🔴</div>
+                            </div>
+                        </div>
+                        <div className="bg-white rounded-lg shadow p-6">
+                            <div className="flex items-center">
+                                <div className="flex-1">
+                                    <p className="text-sm font-medium text-gray-600">Damaged</p>
+                                    <p className="text-3xl font-bold text-yellow-600">{summary.damaged}</p>
+                                </div>
+                                <div className="text-yellow-500 text-3xl">🟡</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Controls */}
+                    <div className="bg-white rounded-lg shadow mb-6 p-6">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                            <div className="flex flex-col sm:flex-row gap-4 flex-1">
+                                <div className="relative flex-1 max-w-md">
+                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                                    <input
+                                        type="text"
+                                        placeholder="Search notebooks..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md"
+                                    />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-sm font-medium text-gray-700">Show:</label>
+                                    <select
+                                        value={rowsPerPage}
+                                        onChange={(e) => {
+                                            setRowsPerPage(parseInt(e.target.value));
+                                            setCurrentPage(1);
+                                        }}
+                                        className="border border-gray-300 rounded-md px-2 py-1"
+                                    >
+                                        <option value="10">10</option>
+                                        <option value="20">20</option>
+                                        <option value="50">50</option>
+                                        <option value="100">100</option>
+                                    </select>
+                                    <span className="text-sm text-gray-600">entries</span>
+                                </div>
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={handleExport}
+                                    className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                                >
+                                    <FileSpreadsheet size={16} className="text-green-600" />
+                                    Export to Excel
+                                </button>
+                                <button
+                                    onClick={() => setIsFormOpen(true)}
+                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                                >
+                                    <Plus size={16} />
+                                    Add Data
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Data Table */}
+                    <div className="bg-white rounded-lg shadow mb-6">
+                        <div className="overflow-x-auto min-w-full">
+                            <table className="min-w-max w-full">
+                                <thead>
+                                    <tr className="bg-sky-100">
+                                        {[
+                                            { key: 'index', label: 'No.' },
+                                            { key: 'assetCode', label: 'Asset Code' },
+                                            { key: 'model', label: 'Model' },
+                                            { key: 'serialNumber', label: 'Serial Number' },
+                                            { key: 'location', label: 'Location' },
+                                            { key: 'userName', label: 'User Name' },
+                                            { key: 'department', label: 'Department' },
+                                            { key: 'status', label: 'Status' },
+                                            { key: 'deviceNumber', label: 'Device Number' },
+                                            { key: 'purchasedUnder', label: 'Purchased Under' },
+                                            { key: 'dueDate', label: '5-Year Due Date' },
+                                            { key: 'remark', label: 'Remark' },
+                                        ].map((column) => (
+                                            <th
+                                                key={column.key}
+                                                className={`text-sky-800 font-semibold cursor-pointer hover:bg-sky-200 transition-colors px-6 py-3 text-left text-xs uppercase tracking-wider ${
+                                                    column.key === 'remark' ? 'w-80' : 'whitespace-nowrap'
+                                                }`}
+                                                onClick={() => handleSort(column.key)}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    {column.label}
+                                                    <span className="text-sky-600">
+                                                        {sortColumn === column.key ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
+                                                    </span>
+                                                </div>
+                                            </th>
+                                        ))}
+                                        <th className="text-sky-800 font-semibold whitespace-nowrap px-6 py-3 text-left text-xs uppercase tracking-wider">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200">
+                                    {paginatedNotebooks.map((notebook, index) => (
+                                        <tr key={notebook.id} className={getRowClassName(notebook.status)}>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                                {(currentPage - 1) * rowsPerPage + index + 1}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{notebook.assetCode}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{notebook.model}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{notebook.serialNumber}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{notebook.location}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{notebook.userName || '-'}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{notebook.department}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{getStatusBadge(notebook.status)}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{notebook.deviceNumber || '-'}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{notebook.purchasedUnder || '-'}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{notebook.dueDate || '-'}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-900 remark-cell" style={{maxWidth: '50ch'}}>
+                                                {notebook.remark || '-'}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                <div className="flex space-x-2">
+                                                    <button
+                                                        onClick={() => {
+                                                            setEditingNotebook(notebook);
+                                                            setIsFormOpen(true);
+                                                        }}
+                                                        className="text-blue-600 hover:text-blue-900"
+                                                    >
+                                                        <Edit size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setDeletingNotebook(notebook)}
+                                                        className="text-red-600 hover:text-red-900"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {/* Bottom Section */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                        <div className="text-sm text-gray-700">
+                            Showing <span className="font-medium">{(currentPage - 1) * rowsPerPage + 1}</span> to{' '}
+                            <span className="font-medium">
+                                {Math.min(currentPage * rowsPerPage, filteredAndSortedNotebooks.length)}
+                            </span>{' '}
+                            of <span className="font-medium">{filteredAndSortedNotebooks.length}</span> entries
+                        </div>
+                        <div className="flex items-center gap-6">
+                            <div className="flex items-center gap-2">
+                                <span className="text-lg">🟢</span>
+                                <span className="text-sm text-gray-700">Active: <span className="font-medium">{summary.active}</span> devices</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-lg">🔴</span>
+                                <span className="text-sm text-gray-700">Inactive: <span className="font-medium">{summary.inactive}</span> devices</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-lg">🟡</span>
+                                <span className="text-sm text-gray-700">Damaged: <span className="font-medium">{summary.damaged}</span> devices</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                        <div className="flex justify-center">
+                            <div className="flex items-center space-x-2">
+                                <button
+                                    onClick={() => setCurrentPage(currentPage - 1)}
+                                    disabled={currentPage === 1}
+                                    className="px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <ChevronLeft size={16} />
+                                </button>
+                                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                    const page = i + 1;
+                                    return (
+                                        <button
+                                            key={page}
+                                            onClick={() => setCurrentPage(page)}
+                                            className={`px-3 py-2 rounded-md ${
+                                                currentPage === page
+                                                    ? 'bg-blue-600 text-white'
+                                                    : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            {page}
+                                        </button>
+                                    );
+                                })}
+                                {totalPages > 5 && (
+                                    <>
+                                        <span className="text-sm text-gray-700">...</span>
+                                        <button
+                                            onClick={() => setCurrentPage(totalPages)}
+                                            className="px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                                        >
+                                            {totalPages}
+                                        </button>
+                                    </>
+                                )}
+                                <button
+                                    onClick={() => setCurrentPage(currentPage + 1)}
+                                    disabled={currentPage === totalPages}
+                                    className="px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <ChevronRight size={16} />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Form Modal */}
+                    <NotebookForm
+                        isOpen={isFormOpen}
+                        onClose={() => {
+                            setIsFormOpen(false);
+                            setEditingNotebook(null);
+                        }}
+                        notebook={editingNotebook}
+                        onSave={handleSave}
+                    />
+
+                    {/* Delete Confirmation Modal */}
+                    <DeleteConfirmation
+                        isOpen={!!deletingNotebook}
+                        notebook={deletingNotebook}
+                        onConfirm={handleDelete}
+                        onCancel={() => setDeletingNotebook(null)}
+                    />
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
